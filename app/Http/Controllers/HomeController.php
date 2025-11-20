@@ -15,28 +15,34 @@ class HomeController extends Controller
 
     public function gerar(Request $request, PdfService $pdfService)
     {
+        set_time_limit(600); // 5 minutos
+        ini_set('memory_limit', '-1'); // sem limite
+
         $request->validate([
-            'nome' => 'required|string',
+            'nomes' => 'required|string',
             'pdf_principal' => 'required|file|mimes:pdf',
             'pdf_secundario' => 'required|file|mimes:pdf',
         ]);
 
-        $nome = $request->input('nome');
+        try {
+            $nomes = preg_split('/\r\n|\r|\n/', trim($request->input('nomes')));
 
-        // Salvar uploads temporários
-        $pdfPrincipalPath = $request->file('pdf_principal')->store('temp');
-        $pdfSecundarioPath = $request->file('pdf_secundario')->store('temp');
+            $pdfPrincipalPath = $request->file('pdf_principal')->store('temp');
+            $pdfSecundarioPath = $request->file('pdf_secundario')->store('temp');
 
-        $pdfPrincipal = Storage::path($pdfPrincipalPath);
-        $pdfSecundario = Storage::path($pdfSecundarioPath);
-        $outputPath = Storage::path("temp/resultado-" . preg_replace('/\s+/', '_', $nome) . ".pdf");
+            $pdfPrincipal = Storage::path($pdfPrincipalPath);
+            $pdfSecundario = Storage::path($pdfSecundarioPath);
+            $outputPath = Storage::path("temp/resultado-lista.pdf");
 
-        $ok = $pdfService->searchAndMerge($nome, $pdfPrincipal, $pdfSecundario, $outputPath);
+            $ok = $pdfService->searchAndMergeList($nomes, $pdfPrincipal, $pdfSecundario, $outputPath);
 
-        if (!$ok) {
-            return back()->withErrors(['msg' => 'Nome não encontrado em um dos PDFs.']);
+            if (!$ok) {
+                return back()->withErrors(['msg' => 'Nenhum dos nomes foi encontrado nos PDFs.']);
+            }
+
+            return response()->download($outputPath)->deleteFileAfterSend(true);
+        } catch (\Exception $e) {
+            return back()->withErrors(['msg' => 'Erro ao processar: ' . $e->getMessage()]);
         }
-
-        return response()->download($outputPath)->deleteFileAfterSend(true);
     }
 }
